@@ -115,7 +115,10 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [quoteIdx, setQuoteIdx] = useState(0)
   const [showConfetti, setShowConfetti] = useState(false)
+  const [monthlyContrib, setMonthlyContrib] = useState<number | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const chartRef = useRef<HTMLCanvasElement>(null)
+  const chartInstanceRef = useRef<unknown>(null)
 
   const fetchQQQ = useCallback(async () => {
     setLoading(true)
@@ -144,6 +147,8 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
   }, [])
 
   useConfettiBurst(canvasRef, showConfetti)
+
+
 
   const price = qqq.price ?? 0
   const totalInvested = contributions.reduce((s, c) => s + c.amount, 0)
@@ -191,6 +196,123 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
     : cadenceDays <= 40 ? 'monthly'
     : cadenceDays <= 70 ? 'every 2 months'
     : `every ~${Math.round(cadenceDays / 30)} months`
+
+  // Slider-driven projection
+  const effectiveMonthly = monthlyContrib ?? Math.round(avgContribAmount / Math.max(avgIntervalMonths, 1))
+
+  function buildProjection(monthly: number, months = 120) {
+    const rate = Math.pow(1.153, 1 / 12) - 1
+    const labels: string[] = []
+    const values: number[] = []
+    const contribLine: number[] = []
+    let val = currentValue
+    let invested = totalInvested
+    const now = new Date()
+    for (let m = 0; m <= months; m++) {
+      const d = new Date(now)
+      d.setMonth(now.getMonth() + m)
+      labels.push(d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }))
+      values.push(Math.round(val))
+      contribLine.push(Math.round(invested))
+      if (m < months) {
+        val = val * (1 + rate) + monthly
+        invested += monthly
+      }
+    }
+    return { labels, values, contribLine }
+  }
+
+  function projMonthsForMonthly(monthly: number) {
+    const rate = Math.pow(1.153, 1 / 12) - 1
+    let val = currentValue, m = 0
+    while (val < goal && m < 600) { val = val * (1 + rate) + monthly; m++ }
+    return m
+  }
+
+  const sliderMonths = projMonthsForMonthly(effectiveMonthly)
+  const sliderProjDate = new Date()
+  sliderProjDate.setMonth(sliderProjDate.getMonth() + sliderMonths)
+  const sliderProjStr = sliderProjDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  // Chart
+  useEffect(() => {
+    if (!price) return
+    const canvas = chartRef.current
+    if (!canvas) return
+    const monthly = monthlyContrib ?? Math.round(avgContribAmount / Math.max(avgIntervalMonths, 1))
+    const { labels, values, contribLine } = buildProjection(monthly)
+
+    const loadChart = async () => {
+      if (typeof window === 'undefined') return
+      const Chart = (await import('chart.js/auto')).default
+      if (chartInstanceRef.current) {
+        (chartInstanceRef.current as { destroy(): void }).destroy()
+      }
+      chartInstanceRef.current = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Projected value',
+              data: values,
+              borderColor: '#006039',
+              backgroundColor: 'rgba(0,96,57,0.06)',
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: true,
+              tension: 0.4,
+            },
+            {
+              label: 'Total contributed',
+              data: contribLine,
+              borderColor: '#C9A84C',
+              backgroundColor: 'transparent',
+              borderWidth: 1.5,
+              borderDash: [4, 4],
+              pointRadius: 0,
+              fill: false,
+              tension: 0.4,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: {
+                maxTicksLimit: 8,
+                font: { size: 11, family: 'Inter, sans-serif' },
+                color: '#9a9a9a',
+              },
+              grid: { color: '#f0f0f0' },
+            },
+            y: {
+              ticks: {
+                callback: (v) => '$' + Number(v).toLocaleString(),
+                font: { size: 11, family: 'Inter, sans-serif' },
+                color: '#9a9a9a',
+                maxTicksLimit: 6,
+              },
+              grid: { color: '#f0f0f0' },
+            },
+          },
+          animation: { duration: 400 },
+        },
+      })
+    }
+    loadChart()
+  }, [price, monthlyContrib, avgContribAmount, avgIntervalMonths, currentValue, totalInvested, goal])
 
   const countedValue = useCountUp(Math.round(currentValue), 1400)
   const countedInvested = useCountUp(Math.round(totalInvested), 1000)
@@ -311,7 +433,66 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
         })}
       </section>
 
-      {/* Projection banner */}
+      {/* Projection + chart */}
+      {price && currentValue > 0 && (
+        <section className={styles.projSection}>
+          <div className={styles.projHeader}>
+            <div>
+              <h3 className={styles.projTitle}>When can Sean afford it?</h3>
+              <p className={styles.projSub}>Adjust your monthly contribution to see the date change live</p>
+            </div>
+            {currentValue >= goal && (
+              <span className={styles.goalBadge}>🎉 Goal reached!</span>
+            )}
+          </div>
+
+          {currentValue < goal && (
+            <>
+              <div className={styles.sliderRow}>
+                <div className={styles.sliderLeft}>
+                  <label className={styles.sliderLabel} htmlFor="contrib-slider">
+                    Monthly contribution
+                  </label>
+                  <div className={styles.sliderAmount}>{fmtInt(effectiveMonthly)}<span className={styles.sliderAmountSub}>/mo</span></div>
+                </div>
+                <input
+                  id="contrib-slider"
+                  type="range"
+                  min={50}
+                  max={5000}
+                  step={50}
+                  value={effectiveMonthly}
+                  onChange={e => setMonthlyContrib(Number(e.target.value))}
+                  className={styles.slider}
+                  aria-label="Monthly contribution amount"
+                />
+                <div className={styles.sliderRight}>
+                  <div className={styles.sliderDate}>{sliderProjStr}</div>
+                  <div className={styles.sliderMonths}>{sliderMonths} months away</div>
+                </div>
+              </div>
+
+              <div className={styles.projCalc}>
+                <span>Based on <strong>{fmtInt(avgContribAmount)}</strong> avg actual contribution · {cadenceLabel} cadence · QQQ 15%/yr growth</span>
+                <span className={styles.disclaimer}> · not financial advice</span>
+              </div>
+            </>
+          )}
+
+          <div className={styles.chartWrap}>
+            <div className={styles.chartLegend}>
+              <span className={styles.legendItem}><span className={styles.legendDot} style={{background:'#006039'}} />Projected value</span>
+              <span className={styles.legendItem}><span className={styles.legendDash} />Total contributed</span>
+              <span className={styles.legendGoal}>Goal: {fmtInt(goal)}</span>
+            </div>
+            <div style={{ position: 'relative', height: '260px' }}>
+              <canvas ref={chartRef} aria-label="Projected fund value over time" role="img" />
+            </div>
+          </div>
+        </section>
+      )}
+
+ {/* Projection banner */}
       {price && currentValue > 0 && (
         <section className={styles.projBanner}>
           {currentValue >= goal
@@ -330,7 +511,7 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
             </>
           }
         </section>
-      )}
+)}
 
       {/* Contributions */}
       <section className={styles.contribSection}>
