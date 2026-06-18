@@ -41,7 +41,7 @@ export default function GiftScreen({ contributions, goal }: Props) {
         </div>
 
         <p className={styles.to}>To: Sean</p>
-        <p className={styles.from}>From: someone who loves you</p>
+        <p className={styles.from}>From: someone who loves you! (HARSHI)</p>
 
         <button
           className={styles.openBtn}

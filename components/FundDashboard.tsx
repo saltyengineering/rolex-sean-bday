@@ -1,21 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import styles from './FundDashboard.module.css'
 
 interface Contribution {
-  date: string
-  amount: number
-  buyPrice: number
-  note?: string
+  date: string; amount: number; buyPrice: number; note?: string
 }
-
 interface QQQData {
-  price: number | null
-  changePct: number | null
-  error?: boolean
+  price: number | null; changePct: number | null; error?: boolean
 }
-
 interface Props {
   contributions: Contribution[]
   goal: number
@@ -35,10 +28,94 @@ function fmtDate(iso: string) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+const QUOTES = [
+  'Every dollar is a tick closer.',
+  'Patience is the rarest luxury.',
+  'The best things are worth saving for.',
+  'One contribution at a time.',
+  'Sean deserves nothing but the best.',
+  'Time is the ultimate investment.',
+]
+
+const MILESTONES = [
+  { pct: 10,  label: '10%',      emoji: '🌱' },
+  { pct: 25,  label: 'Quarter',  emoji: '🥂' },
+  { pct: 50,  label: 'Halfway',  emoji: '🔥' },
+  { pct: 75,  label: '¾ there',  emoji: '🏃' },
+  { pct: 100, label: 'Done!',    emoji: '🎉' },
+]
+
+const CONFETTI_COLORS = ['#006039','#006039','#C9A84C','#C9A84C','#008f55','#e8c55a','#004d2c']
+
+function useCountUp(target: number, duration = 1200) {
+  const [val, setVal] = useState(0)
+  useEffect(() => {
+    if (!target) return
+    let start: number | null = null
+    const step = (ts: number) => {
+      if (!start) start = ts
+      const p = Math.min((ts - start) / duration, 1)
+      setVal(Math.round(p * p * target))
+      if (p < 1) requestAnimationFrame(step)
+    }
+    const id = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(id)
+  }, [target, duration])
+  return val
+}
+
+function useConfettiBurst(canvasRef: React.RefObject<HTMLCanvasElement>, trigger: boolean) {
+  useEffect(() => {
+    if (!trigger) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    canvas.width = canvas.offsetWidth
+    canvas.height = canvas.offsetHeight
+    const cx = canvas.width / 2, cy = canvas.height * 0.35
+    const pieces = Array.from({ length: 90 }, () => ({
+      x: cx, y: cy,
+      vx: (Math.random() - 0.5) * 14,
+      vy: -Math.random() * 12 - 4,
+      size: 5 + Math.random() * 6,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.2,
+      shape: Math.random() > 0.4 ? 'rect' : 'circle' as 'rect' | 'circle',
+      life: 1,
+    }))
+    let animId: number
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      let alive = false
+      for (const p of pieces) {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.4
+        p.rotation += p.rotSpeed; p.life -= 0.018
+        if (p.life <= 0) continue
+        alive = true
+        ctx.save()
+        ctx.globalAlpha = p.life
+        ctx.translate(p.x, p.y)
+        ctx.rotate(p.rotation)
+        ctx.fillStyle = p.color
+        if (p.shape === 'rect') ctx.fillRect(-p.size / 2, -p.size * 0.35, p.size, p.size * 0.7)
+        else { ctx.beginPath(); ctx.arc(0, 0, p.size * 0.42, 0, Math.PI * 2); ctx.fill() }
+        ctx.restore()
+      }
+      if (alive) animId = requestAnimationFrame(draw)
+    }
+    animId = requestAnimationFrame(draw)
+    return () => cancelAnimationFrame(animId)
+  }, [trigger, canvasRef])
+}
+
 export default function FundDashboard({ contributions, goal, onBack, watchName = 'Submariner', watchRef = 'Ref. 124060' }: Props) {
   const [qqq, setQqq] = useState<QQQData>({ price: null, changePct: null })
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
+  const [quoteIdx, setQuoteIdx] = useState(0)
+  const [showConfetti, setShowConfetti] = useState(false)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const fetchQQQ = useCallback(async () => {
     setLoading(true)
@@ -56,6 +133,18 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
 
   useEffect(() => { fetchQQQ() }, [fetchQQQ])
 
+  useEffect(() => {
+    const id = setInterval(() => setQuoteIdx(i => (i + 1) % QUOTES.length), 4000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowConfetti(true), 600)
+    return () => clearTimeout(t)
+  }, [])
+
+  useConfettiBurst(canvasRef, showConfetti)
+
   const price = qqq.price ?? 0
   const totalInvested = contributions.reduce((s, c) => s + c.amount, 0)
   const totalShares = contributions.reduce((s, c) => s + c.amount / c.buyPrice, 0)
@@ -65,103 +154,188 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
   const progressPct = Math.min((currentValue / goal) * 100, 100)
   const changePct = qqq.changePct ?? 0
 
-  const avgMonthly = totalInvested / Math.max(contributions.length, 1)
-  const monthlyRate = Math.pow(1.153, 1 / 12) - 1
-  let projVal = currentValue
-  let projMonths = 0
+  // Projection based on actual contribution cadence
+  const sortedDates = [...contributions]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(c => new Date(c.date).getTime())
+
+  let avgIntervalMs = 30 * 24 * 60 * 60 * 1000 // default 1 month if only 1 contribution
+  if (sortedDates.length >= 2) {
+    const totalSpan = sortedDates[sortedDates.length - 1] - sortedDates[0]
+    avgIntervalMs = totalSpan / (sortedDates.length - 1)
+  }
+  const avgIntervalMonths = avgIntervalMs / (1000 * 60 * 60 * 24 * 30.44)
+  const avgContribAmount = totalInvested / Math.max(contributions.length, 1)
+  const monthlyGrowthRate = Math.pow(1.153, 1 / 12) - 1
+
+  let projVal = currentValue, projMonths = 0, monthsSinceLastContrib = 0
   if (price && currentValue < goal) {
     while (projVal < goal && projMonths < 600) {
-      projVal = projVal * (1 + monthlyRate) + avgMonthly
+      projVal *= (1 + monthlyGrowthRate)
+      monthsSinceLastContrib += 1
+      if (monthsSinceLastContrib >= avgIntervalMonths) {
+        projVal += avgContribAmount
+        monthsSinceLastContrib = 0
+      }
       projMonths++
     }
   }
+
   const projDate = new Date()
   projDate.setMonth(projDate.getMonth() + projMonths)
   const projStr = projDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
+  const cadenceDays = Math.round(avgIntervalMs / (1000 * 60 * 60 * 24))
+  const cadenceLabel = cadenceDays <= 10 ? 'weekly'
+    : cadenceDays <= 20 ? 'bi-weekly'
+    : cadenceDays <= 40 ? 'monthly'
+    : cadenceDays <= 70 ? 'every 2 months'
+    : `every ~${Math.round(cadenceDays / 30)} months`
+
+  const countedValue = useCountUp(Math.round(currentValue), 1400)
+  const countedInvested = useCountUp(Math.round(totalInvested), 1000)
+
+  // SVG ring
+  const R = 88, CIRC = 2 * Math.PI * R
+  const dashOffset = CIRC * (1 - progressPct / 100)
+
   return (
     <main className={styles.main}>
-      <h1 className="sr-only">Rolex Submariner Fund — Sean&apos;s Watch</h1>
+      <h1 className="sr-only">Sean&apos;s Rolex Fund Dashboard</h1>
+      <canvas ref={canvasRef} className={styles.confettiCanvas} aria-hidden="true" />
+
+      <div className={styles.topBar} />
+      <div className={styles.botBar} />
 
       {onBack && (
-        <button className={styles.backBtn} onClick={onBack} aria-label="Back to intro">
-          ← back
-        </button>
+        <button className={styles.backBtn} onClick={onBack}>← back</button>
       )}
 
-      <header className={styles.header}>
-        <svg className={styles.crown} width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
-          <circle cx="22" cy="22" r="20" stroke="#006039" strokeWidth="1.5" fill="none" />
-          <circle cx="22" cy="22" r="15" stroke="#C9A84C" strokeWidth="0.5" strokeDasharray="2 3" fill="none" />
-          <text x="22" y="27" textAnchor="middle" fontSize="14" fill="#C9A84C" fontFamily="serif">♛</text>
-        </svg>
-        <h2 className={styles.title}>Sean&apos;s Rolex Fund</h2>
-        <p className={styles.subtitle}>QQQ · {watchName} · {watchRef} · Goal: {fmtInt(goal)}</p>
-      </header>
+      {/* Hero */}
+      <section className={styles.hero}>
+        <div className={styles.heroLeft}>
+          <p className={styles.eyebrow}>Rolex · Since 1905</p>
+          <h2 className={styles.heroTitle}>Sean&apos;s<br /><span className={styles.green}>Rolex Fund</span></h2>
+          <p className={styles.heroSub}>{watchName} · {watchRef}</p>
 
-      <div className={styles.card}>
-        <div className={styles.qqqBar}>
-          <div className={styles.qqqLeft}>
+          <div className={styles.quoteWrap}>
+            <p className={styles.quote} key={quoteIdx}>{QUOTES[quoteIdx]}</p>
+          </div>
+
+          <div className={styles.qqqBar}>
             <span className={styles.ticker}>QQQ</span>
-            <span className={styles.qqqPrice}>
-              {loading ? '—' : qqq.price ? fmt(qqq.price) : 'unavailable'}
-            </span>
+            <span className={styles.qqqPrice}>{loading ? '—' : qqq.price ? fmt(qqq.price) : 'n/a'}</span>
             {!loading && qqq.price && (
-              <span className={`${styles.change} ${changePct >= 0 ? styles.up : styles.down}`}
-                    style={{ background: changePct >= 0 ? 'var(--up-bg)' : 'var(--down-bg)' }}>
-                {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}% today
+              <span className={`${styles.change} ${changePct >= 0 ? styles.up : styles.down}`}>
+                {changePct >= 0 ? '+' : ''}{changePct.toFixed(2)}%
               </span>
             )}
-          </div>
-          <div className={styles.qqqRight}>
-            {lastUpdated && <span className={styles.updated}>as of {lastUpdated}</span>}
-            <button className={styles.refreshBtn} onClick={fetchQQQ} aria-label="Refresh QQQ price">
-              ↻ refresh
-            </button>
+            {lastUpdated && <span className={styles.updated}>· {lastUpdated}</span>}
+            <button className={styles.refreshBtn} onClick={fetchQQQ} aria-label="Refresh">↻</button>
           </div>
         </div>
 
-        <div className={styles.statsGrid}>
-          {[
-            { label: 'Total invested', val: fmtInt(totalInvested), cls: '' },
-            { label: 'Current value',  val: price ? fmtInt(currentValue) : '—', cls: styles.gold },
-            { label: 'Total gain',     val: price ? `${gain >= 0 ? '+' : ''}${fmt(gain)}` : '—', cls: gain >= 0 ? styles.up : styles.down },
-            { label: 'Return',         val: price ? `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(2)}%` : '—', cls: gainPct >= 0 ? styles.up : styles.down },
-            { label: 'Shares held',    val: totalShares.toFixed(4), cls: '' },
-            { label: 'Remaining',      val: price ? fmtInt(Math.max(goal - currentValue, 0)) : '—', cls: '' },
-          ].map(({ label, val, cls }) => (
-            <div key={label} className={styles.stat}>
-              <div className={styles.statLabel}>{label}</div>
-              <div className={`${styles.statValue} ${cls}`}>{val}</div>
+        <div className={styles.heroRight}>
+          <div className={styles.ringWrap}>
+            <svg width="220" height="220" viewBox="0 0 220 220" aria-label={`${progressPct.toFixed(1)}% of goal reached`}>
+              <circle cx="110" cy="110" r={R} fill="none" stroke="#e8e8e8" strokeWidth="14" />
+              <circle
+                cx="110" cy="110" r={R}
+                fill="none"
+                stroke="#006039"
+                strokeWidth="14"
+                strokeLinecap="round"
+                strokeDasharray={CIRC}
+                strokeDashoffset={dashOffset}
+                transform="rotate(-90 110 110)"
+                style={{ transition: 'stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1)' }}
+              />
+              <circle cx="110" cy="110" r="66" fill="none" stroke="#C9A84C" strokeWidth="1" strokeDasharray="3 5" />
+              <text x="110" y="122" textAnchor="middle" fontSize="32" fontWeight="500" fill="#1a1a1a" fontFamily="Inter, sans-serif">{progressPct.toFixed(0)}%</text>
+              <text x="110" y="142" textAnchor="middle" fontSize="11" fill="#C9A84C" fontFamily="Inter, sans-serif">of {fmtInt(goal)}</text>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+      {/* Big stats */}
+      <section className={styles.statsRow}>
+        <div className={styles.bigStat}>
+          <div className={styles.bigStatLabel}>Current value</div>
+          <div className={`${styles.bigStatVal} ${styles.green}`}>
+            ${price ? countedValue.toLocaleString() : '—'}
+          </div>
+        </div>
+        <div className={styles.statDivider} />
+        <div className={styles.bigStat}>
+          <div className={styles.bigStatLabel}>Total invested</div>
+          <div className={styles.bigStatVal}>${countedInvested.toLocaleString()}</div>
+        </div>
+        <div className={styles.statDivider} />
+        <div className={styles.bigStat}>
+          <div className={styles.bigStatLabel}>Total gain</div>
+          <div className={`${styles.bigStatVal} ${price ? (gain >= 0 ? styles.gainUp : styles.gainDown) : ''}`}>
+            {price ? `${gain >= 0 ? '+' : ''}${fmt(gain)}` : '—'}
+          </div>
+        </div>
+        <div className={styles.statDivider} />
+        <div className={styles.bigStat}>
+          <div className={styles.bigStatLabel}>Return</div>
+          <div className={`${styles.bigStatVal} ${price ? (gainPct >= 0 ? styles.gainUp : styles.gainDown) : ''}`}>
+            {price ? `${gainPct >= 0 ? '+' : ''}${gainPct.toFixed(2)}%` : '—'}
+          </div>
+        </div>
+        <div className={styles.statDivider} />
+        <div className={styles.bigStat}>
+          <div className={styles.bigStatLabel}>Shares held</div>
+          <div className={styles.bigStatVal}>{totalShares.toFixed(4)}</div>
+        </div>
+        <div className={styles.statDivider} />
+        <div className={styles.bigStat}>
+          <div className={styles.bigStatLabel}>Remaining</div>
+          <div className={styles.bigStatVal}>{price ? fmtInt(Math.max(goal - currentValue, 0)) : '—'}</div>
+        </div>
+      </section>
+
+      {/* Milestones */}
+      <section className={styles.milestones}>
+        {MILESTONES.map(m => {
+          const reached = progressPct >= m.pct
+          return (
+            <div key={m.pct} className={`${styles.milestone} ${reached ? styles.milestoneReached : ''}`}>
+              <span className={styles.milestoneEmoji}>{m.emoji}</span>
+              <span className={styles.milestonePct}>{m.label}</span>
+              {reached && <span className={styles.milestoneTick}>✓</span>}
             </div>
-          ))}
-        </div>
+          )
+        })}
+      </section>
 
-        <div className={styles.progressSection}>
-          <div className={styles.progressLabels}>
-            <span>{progressPct.toFixed(1)}% of goal</span>
-            <span>{fmtInt(goal)}</span>
-          </div>
-          <div className={styles.trackBg}>
-            <div className={styles.trackFill} style={{ width: `${progressPct}%` }} />
-          </div>
-        </div>
+      {/* Projection banner */}
+      {price && currentValue > 0 && (
+        <section className={styles.projBanner}>
+          {currentValue >= goal
+            ? <><span className={styles.projEmoji}>🎉</span><span>Goal reached — time to get Sean his Rolex!</span></>
+            : <>
+              <span className={styles.projEmoji}>🎯</span>
+              <div>
+                <div className={styles.projMain}>
+                  Sean could afford this watch around <strong>{projStr}</strong>
+                </div>
+                <div className={styles.projDetail}>
+                  Based on {contributions.length} contribution{contributions.length !== 1 ? 's' : ''} averaging <strong>{fmtInt(avgContribAmount)}</strong> {cadenceLabel} · QQQ growing at 15%/yr · {projMonths} months to go
+                  <span className={styles.disclaimer}> · not financial advice</span>
+                </div>
+              </div>
+            </>
+          }
+        </section>
+      )}
 
-        {price && currentValue > 0 && (
-          <div className={styles.projection}>
-            {currentValue >= goal
-              ? '🎉 Goal reached — time to get Sean his Rolex!'
-              : <><span>At QQQ&apos;s 20-yr avg (~15%/yr) and your current pace, you could hit </span><strong>{fmtInt(goal)}</strong><span> around </span><strong>{projStr}</strong><span> — {projMonths} months away. Keep going! </span><span className={styles.disclaimer}>(Not financial advice.)</span></>
-            }
-          </div>
-        )}
-      </div>
-
-      <div className={styles.card}>
+      {/* Contributions */}
+      <section className={styles.contribSection}>
         <h3 className={styles.sectionTitle}>Contributions</h3>
-        <p className={styles.hint}>
-          To log a new contribution, edit <code>data/contributions.json</code> and push to GitHub.
-        </p>
+        <p className={styles.hint}>Edit <code>data/contributions.json</code> and push to GitHub to log a new one.</p>
         {contributions.length === 0 ? (
           <p className={styles.empty}>No contributions yet.</p>
         ) : (
@@ -169,13 +343,8 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Invested</th>
-                  <th>Buy price</th>
-                  <th>Shares</th>
-                  <th>Current value</th>
-                  <th>Gain</th>
-                  <th>Note</th>
+                  <th>Date</th><th>Invested</th><th>Buy price</th>
+                  <th>Shares</th><th>Current value</th><th>Gain</th><th>Note</th>
                 </tr>
               </thead>
               <tbody>
@@ -184,13 +353,13 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
                   const cv = price ? shares * price : 0
                   const cg = cv - c.amount
                   return (
-                    <tr key={i}>
+                    <tr key={i} className={styles.tableRow}>
                       <td>{fmtDate(c.date)}</td>
                       <td>{fmt(c.amount)}</td>
                       <td>{fmt(c.buyPrice)}</td>
                       <td>{shares.toFixed(4)}</td>
                       <td className={styles.gold}>{price ? fmt(cv) : '—'}</td>
-                      <td className={cg >= 0 ? styles.up : styles.down}>
+                      <td className={cg >= 0 ? styles.gainUp : styles.gainDown}>
                         {price ? `${cg >= 0 ? '+' : ''}${fmt(cg)}` : '—'}
                       </td>
                       <td className={styles.note}>{c.note ?? '—'}</td>
@@ -201,7 +370,7 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
             </table>
           </div>
         )}
-      </div>
+      </section>
 
       <footer className={styles.footer}>
         for Sean · {watchName} {watchRef} · one day at a time

@@ -204,7 +204,7 @@ export default function IntroScreen({ contributions, goal }: Props) {
               <div className={styles.crownInner}>♛</div>
             </div>
             <p className={styles.eyebrow}>Rolex · Since 1905</p>
-            <p className={styles.happyBirthday}>Happy Birthday,<br /><span className={styles.nameGreen}>Sean</span></p>
+            <p className={styles.happyBirthday}>Happy Birthday,<br /><span className={styles.nameGreen}>Sean!</span></p>
             <p className={styles.promise}>
               The Rolex isn&apos;t here yet —<br />
               <strong>but this promise is.</strong>
@@ -215,7 +215,7 @@ export default function IntroScreen({ contributions, goal }: Props) {
 
           {/* Watch selector */}
           <div className={styles.selectorBlock}>
-            <p className={styles.selectorLabel}>Choose his watch</p>
+            <p className={styles.selectorLabel}>Choose your watch!</p>
             <div className={styles.watchGrid}>
               {WATCHES.map(w => (
                 <button
