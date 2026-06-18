@@ -284,7 +284,7 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
             legend: { display: false },
             tooltip: {
               callbacks: {
-               label: (ctx) => ctx.parsed.y == null ? '' : `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`,
+                label: (ctx) => ctx.parsed.y == null ? '' : `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`,
               },
             },
           },
@@ -433,8 +433,7 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
         })}
       </section>
 
-
-       {/* Projection banner */}
+      {/* Projection banner */}
       {price && currentValue > 0 && (
         <section className={styles.projBanner}>
           {currentValue >= goal
@@ -455,6 +454,64 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
         </section>
 )}
 
+      {/* Projection + chart */}
+      {price && currentValue > 0 && (
+        <section className={styles.projSection}>
+          <div className={styles.projHeader}>
+            <div>
+              <h3 className={styles.projTitle}>When can Sean afford it?</h3>
+              <p className={styles.projSub}>Adjust your monthly contribution to see the date change live</p>
+            </div>
+            {currentValue >= goal && (
+              <span className={styles.goalBadge}>🎉 Goal reached!</span>
+            )}
+          </div>
+
+          {currentValue < goal && (
+            <>
+              <div className={styles.sliderRow}>
+                <div className={styles.sliderLeft}>
+                  <label className={styles.sliderLabel} htmlFor="contrib-slider">
+                    Monthly contribution
+                  </label>
+                  <div className={styles.sliderAmount}>{fmtInt(effectiveMonthly)}<span className={styles.sliderAmountSub}>/mo</span></div>
+                </div>
+                <input
+                  id="contrib-slider"
+                  type="range"
+                  min={50}
+                  max={5000}
+                  step={50}
+                  value={effectiveMonthly}
+                  onChange={e => setMonthlyContrib(Number(e.target.value))}
+                  className={styles.slider}
+                  aria-label="Monthly contribution amount"
+                />
+                <div className={styles.sliderRight}>
+                  <div className={styles.sliderDate}>{sliderProjStr}</div>
+                  <div className={styles.sliderMonths}>{sliderMonths} months away</div>
+                </div>
+              </div>
+
+              <div className={styles.projCalc}>
+                <span>Based on <strong>{fmtInt(avgContribAmount)}</strong> avg actual contribution · {cadenceLabel} cadence · QQQ 15%/yr growth</span>
+                <span className={styles.disclaimer}> · not financial advice</span>
+              </div>
+            </>
+          )}
+
+          <div className={styles.chartWrap}>
+            <div className={styles.chartLegend}>
+              <span className={styles.legendItem}><span className={styles.legendDot} style={{background:'#006039'}} />Projected value</span>
+              <span className={styles.legendItem}><span className={styles.legendDash} />Total contributed</span>
+              <span className={styles.legendGoal}>Goal: {fmtInt(goal)}</span>
+            </div>
+            <div style={{ position: 'relative', height: '260px' }}>
+              <canvas ref={chartRef} aria-label="Projected fund value over time" role="img" />
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Contributions */}
       <section className={styles.contribSection}>
