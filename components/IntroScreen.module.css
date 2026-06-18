@@ -1,0 +1,219 @@
+.scene {
+  min-height: 100vh;
+  background: #ffffff;
+  position: relative;
+  overflow: hidden;
+}
+
+.confettiCanvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.topBar {
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: #006039;
+  transform: scaleX(0); transform-origin: left;
+  animation: lineIn 0.8s 0.1s cubic-bezier(.4,0,.2,1) forwards;
+  z-index: 10;
+}
+.botBar {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+  background: #C9A84C;
+  transform: scaleX(0); transform-origin: right;
+  animation: lineIn 0.8s 0.3s cubic-bezier(.4,0,.2,1) forwards;
+  z-index: 10;
+}
+@keyframes lineIn { to { transform: scaleX(1); } }
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+  position: relative; z-index: 2;
+}
+@media (max-width: 700px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.videoCol {
+  position: relative;
+  overflow: hidden;
+}
+@media (max-width: 700px) {
+  .videoCol { height: 55vw; min-height: 220px; }
+}
+
+.videoWrap { position: absolute; inset: 0; }
+
+.video {
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center top;
+  display: block;
+}
+
+.videoOverlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to right, transparent 55%, #ffffff 100%);
+  pointer-events: none;
+}
+@media (max-width: 700px) {
+  .videoOverlay {
+    background: linear-gradient(to bottom, transparent 55%, #ffffff 100%);
+  }
+}
+
+.videoFallback {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: #f5f5f0; gap: 16px;
+}
+.videoFallbackText {
+  font-family: 'Playfair Display', serif;
+  font-size: 18px; color: #006039; letter-spacing: 0.1em;
+}
+
+.contentCol {
+  display: flex; flex-direction: column;
+  justify-content: center;
+  padding: 3rem 2.5rem 3rem 2rem;
+  gap: 1.5rem;
+}
+@media (max-width: 700px) {
+  .contentCol { padding: 2rem 1.5rem; }
+}
+
+.birthdayBlock {
+  display: flex; flex-direction: column; gap: 10px;
+  opacity: 0;
+  animation: fadeUp 0.7s 0.5s ease forwards;
+}
+
+.crownRing {
+  width: 64px; height: 64px; border-radius: 50%;
+  border: 2px solid #006039;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff;
+}
+.crownInner {
+  width: 50px; height: 50px; border-radius: 50%;
+  border: 1px solid #C9A84C;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; color: #C9A84C;
+}
+
+.eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase;
+  color: #006039;
+}
+
+.happyBirthday {
+  font-family: 'Playfair Display', serif;
+  font-size: 38px; font-weight: 400;
+  color: #1a1a1a; letter-spacing: 0.02em; line-height: 1.15;
+}
+@media (max-width: 900px) {
+  .happyBirthday { font-size: 28px; }
+}
+
+.nameGreen { color: #006039; }
+
+.promise {
+  font-family: 'Playfair Display', serif;
+  font-size: 15px; color: #6b6b6b; line-height: 1.7;
+}
+.promise strong { color: #1a1a1a; font-weight: 500; }
+
+.goldenDivider {
+  width: 48px; height: 1.5px; background: #C9A84C;
+  opacity: 0;
+  animation: fadeIn 0.4s 1.1s ease forwards;
+}
+
+.selectorBlock {
+  opacity: 0;
+  animation: fadeUp 0.6s 0.9s ease forwards;
+}
+
+.selectorLabel {
+  font-family: 'Inter', sans-serif;
+  font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: #9a9a9a; margin-bottom: 10px;
+}
+
+.watchGrid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px; margin-bottom: 8px;
+}
+
+.watchCard {
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px; padding: 10px 12px;
+  text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+  transition: border-color 0.2s, background 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+.watchCard:hover { border-color: #006039; }
+.watchCardActive {
+  border-color: #006039 !important;
+  background: rgba(0,96,57,0.04) !important;
+}
+.watchCardName { font-size: 13px; font-weight: 500; color: #1a1a1a; }
+.watchCardRef  { font-size: 10px; color: #9a9a9a; letter-spacing: 0.06em; }
+.watchCardPrice{ font-size: 12px; color: #C9A84C; margin-top: 2px; }
+
+.watchDesc {
+  font-size: 11px; color: #9a9a9a; letter-spacing: 0.06em;
+}
+
+.statsStrip {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 20px;
+  border: 1px solid #e8e8e8; border-radius: 6px;
+  opacity: 0;
+  animation: fadeUp 0.5s 1.2s ease forwards;
+}
+.stripItem { text-align: center; flex: 1; }
+.stripLabel {
+  font-family: 'Inter', sans-serif;
+  font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: #9a9a9a; margin-bottom: 4px;
+}
+.stripVal {
+  font-family: 'Inter', sans-serif;
+  font-size: 15px; font-weight: 500; color: #C9A84C;
+}
+.stripDiv { width: 1px; height: 28px; background: #e8e8e8; flex-shrink: 0; }
+
+.enterBtn {
+  opacity: 0;
+  animation: fadeUp 0.5s 1.5s ease forwards;
+  padding: 13px 32px; width: fit-content;
+  background: #006039; color: #ffffff;
+  border: none; border-radius: 2px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.enterBtn:hover { background: #004d2c; }
+
+.footnote {
+  opacity: 0;
+  animation: fadeIn 0.4s 1.8s ease forwards;
+  font-family: 'Inter', sans-serif;
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: #c0c0c0;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
