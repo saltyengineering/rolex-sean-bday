@@ -179,7 +179,7 @@ export default function IntroScreen({ contributions, goal }: Props) {
               <video
                 key={selectedWatch.id}
                 className={styles.video}
-                autoPlay muted loop playsInline
+                autoPlay loop playsInline
                 onError={() => setVideoError(true)}
               >
                 <source src={selectedWatch.video} type="video/webm" />
