@@ -284,7 +284,7 @@ export default function FundDashboard({ contributions, goal, onBack, watchName =
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: (ctx) => `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`,
+               label: (ctx) => ctx.parsed.y == null ? '' : `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`,
               },
             },
           },
